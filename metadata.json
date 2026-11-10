@@ -1,0 +1,6 @@
+{
+  "name": "Chess Realtime Multiplayer",
+  "description": "Jogo de xadrez online multiplayer em tempo real com Supabase, salas privadas e públicas, sincronização instantânea, validação de jogadas e chat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

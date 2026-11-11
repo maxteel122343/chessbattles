@@ -1,6 +1,6 @@
 {
-  "name": "Chess Realtime Multiplayer",
-  "description": "Jogo de xadrez online multiplayer em tempo real com Supabase, salas privadas e públicas, sincronização instantânea, validação de jogadas e chat.",
+  "name": "Remix Wizard Chess 3D",
+  "description": "Interactive 3D Gothic Cathedral Wizard Chess with sculpted stone pieces, cinematic melee captures, stone shatter physics, and single-player AI.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

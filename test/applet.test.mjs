@@ -1,58 +1,74 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Chess } from 'chess.js';
-import {
-  DEFAULT_SUPABASE_URL,
-  DEFAULT_SUPABASE_ANON_KEY,
-  generateRoomCode,
-} from '../src/lib/supabase.ts';
-import { applyChessMove, getCapturedPieces } from '../src/lib/chessEngine.ts';
-import { SUPABASE_SQL_SCRIPT } from '../src/lib/sqlScript.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
 
-test('Supabase default credentials are fully configured with provided project ref', () => {
-  assert.equal(DEFAULT_SUPABASE_URL, 'https://jsjuozqdtqkzgczhrrhv.supabase.co');
-  assert.ok(DEFAULT_SUPABASE_ANON_KEY.startsWith('eyJhbGciOiJIUzI1Ni'));
+const ROOT = process.cwd();
+
+test('Simplified Single-Player HUD in src/App.tsx excludes speed sliders, notation script bar, and multiplayer lobby', () => {
+  const appTsx = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf-8');
+
+  // Must include simplified game & camera controls
+  for (const requiredId of [
+    'btn-side-toggle',
+    'btn-ai-move',
+    'btn-reset',
+    'btn-cam-player',
+    'btn-cam-top',
+    'btn-cam-side',
+    'btn-cam-wide',
+    'btn-hide-ui',
+    'controls-hint',
+    'captured-tray'
+  ]) {
+    assert.ok(appTsx.includes(`id="${requiredId}"`), `Missing required HUD control #${requiredId}`);
+  }
+
+  // Must NOT include camera speed sliders, script mode bar, or multiplayer lobby
+  for (const forbiddenId of [
+    'cam-speed-wrap',
+    'input-cam-speed',
+    'rot-speed-wrap',
+    'input-rot-speed',
+    'script-bar',
+    'btn-script-modal',
+    'btn-script-prev',
+    'btn-script-next',
+    'btn-lobby',
+    'lobby-modal',
+    'room-pill',
+    'btn-checkmate-stepback'
+  ]) {
+    assert.ok(!appTsx.includes(forbiddenId), `Forbidden UI element #${forbiddenId} found in App.tsx`);
+  }
 });
 
-test('generateRoomCode produces unique 6-character uppercase codes', () => {
-  const code1 = generateRoomCode();
-  const code2 = generateRoomCode();
-  assert.equal(code1.length, 6);
-  assert.equal(code2.length, 6);
-  assert.match(code1, /^[A-Z0-9]{6}$/);
-  assert.notEqual(code1, code2);
-});
+test('All 7 compressed 3D assets (.glb.gz.b64) decode and gunzip to valid glTF 2.0 binary models', () => {
+  const expectedModels = [
+    'option8_cathedral',
+    'pawn_white',
+    'rook_white',
+    'knight_white',
+    'bishop_white',
+    'queen_white',
+    'king_white'
+  ];
 
-test('Chess engine validates legal moves, check, and captures accurately', () => {
-  const initialFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  
-  // White plays e2 -> e4
-  const res1 = applyChessMove(initialFen, 'e2', 'e4');
-  assert.equal(res1.success, true);
-  assert.equal(res1.san, 'e4');
-  assert.equal(res1.turn, 'b');
+  for (const name of expectedModels) {
+    const b64Path = path.join(ROOT, 'public/assets/glb', `${name}.glb.gz.b64`);
+    assert.ok(fs.existsSync(b64Path), `Missing 3D asset ${b64Path}`);
+    const b64Text = fs.readFileSync(b64Path, 'utf-8').trim();
+    assert.ok(b64Text.length > 1000, `Asset ${name}.glb.gz.b64 is unexpectedly small`);
 
-  // Black plays e7 -> e5
-  const res2 = applyChessMove(res1.fen, 'e7', 'e5');
-  assert.equal(res2.success, true);
-  assert.equal(res2.san, 'e5');
-  assert.equal(res2.turn, 'w');
+    const gzBuf = Buffer.from(b64Text, 'base64');
+    const glbBuf = zlib.gunzipSync(gzBuf);
 
-  // Illegal move test (King cannot leap across board)
-  const illegal = applyChessMove(res2.fen, 'e1', 'e7');
-  assert.equal(illegal.success, false);
-});
-
-test('Captured pieces calculation works properly', () => {
-  const fenWithCaptures = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
-  const captured = getCapturedPieces(fenWithCaptures);
-  assert.ok(Array.isArray(captured.white));
-  assert.ok(Array.isArray(captured.black));
-});
-
-test('SQL script includes rooms, moves, RLS policies and realtime publications', () => {
-  assert.ok(SUPABASE_SQL_SCRIPT.includes('CREATE TABLE IF NOT EXISTS public.rooms'));
-  assert.ok(SUPABASE_SQL_SCRIPT.includes('CREATE TABLE IF NOT EXISTS public.moves'));
-  assert.ok(SUPABASE_SQL_SCRIPT.includes('ALTER PUBLICATION supabase_realtime ADD TABLE public.rooms'));
-  assert.ok(SUPABASE_SQL_SCRIPT.includes('ALTER PUBLICATION supabase_realtime ADD TABLE public.moves'));
+    const magic = glbBuf.toString('ascii', 0, 4);
+    const version = glbBuf.readUInt32LE(4);
+    const totalLen = glbBuf.readUInt32LE(8);
+    assert.equal(magic, 'glTF', `Invalid glTF magic header for ${name}`);
+    assert.equal(version, 2, `Invalid glTF version for ${name}`);
+    assert.equal(totalLen, glbBuf.length, `Mismatched glTF byte length for ${name}`);
+  }
 });
